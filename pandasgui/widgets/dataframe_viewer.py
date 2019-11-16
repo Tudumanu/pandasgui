@@ -363,7 +363,7 @@ class DataTableView(QtWidgets.QTableView):
 
         # If I try to use Pyperclip without starting new thread large values give access denied error
         def thread_function(df):
-            df.to_clipboard(index=False, header=False)
+            df.to_clipboard(index=True, header=True)
 
         threading.Thread(target=thread_function, args=(df,)).start()
 
