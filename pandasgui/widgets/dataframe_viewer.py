@@ -31,6 +31,8 @@ class DataFrameViewer(QtWidgets.QWidget):
         # Indicates whether the widget has been shown yet. Set to True in
         self._loaded = False
 
+        print('DataFrameViewer (the aggregator)')
+
         if not type(df) == pd.DataFrame:
             orig_type = type(df)
             df = df.to_frame()
@@ -225,6 +227,8 @@ class NoFocusDelegate(QtWidgets.QStyledItemDelegate):
         super().paint(QPainter, QStyleOptionViewItem, QModelIndex)
 
 
+#  TABLES
+
 class DataTableModel(QtCore.QAbstractTableModel):
     """
     Model for DataTableView to connect for DataFrame data
@@ -233,6 +237,7 @@ class DataTableModel(QtCore.QAbstractTableModel):
     def __init__(self, df, parent=None):
         super().__init__(parent)
         self.df = df
+        print('DataTableModel (model/content of the table)')
 
     def headerData(self, section, orientation, role=None):
         # Headers for DataTableView are hidden. Header data is shown in HeaderView
@@ -294,7 +299,6 @@ class DataTableModel(QtCore.QAbstractTableModel):
 
             return True
 
-
 class DataTableView(QtWidgets.QTableView):
     """
     Displays the DataFrame data as a table
@@ -304,9 +308,16 @@ class DataTableView(QtWidgets.QTableView):
         super().__init__(parent)
         self.parent = parent
 
+        # set sortable
+        self.setSortingEnabled(True)
+
         # Create and set model
         model = DataTableModel(df)
-        self.setModel(model)
+        proxyModel =  QtCore.QSortFilterProxyModel(self)
+        proxyModel.setSourceModel(model)
+        self.setModel(proxyModel)
+
+        print('dataTableView (the body/frame of the table)')
 
         # Hide the headers. The DataFrame headers (index & columns) will be displayed in the DataFrameHeaderViews
         self.horizontalHeader().hide()
@@ -367,6 +378,7 @@ class DataTableView(QtWidgets.QTableView):
 
         threading.Thread(target=thread_function, args=(df,)).start()
 
+        # TODO: está dando erro quando nulo, qual funcionalidade?
         clipboard.setText(text)
 
     def paste(self):
@@ -376,7 +388,7 @@ class DataTableView(QtWidgets.QTableView):
             app = QtWidgets.QApplication(sys.argv)
         clipboard = app.clipboard()
 
-        # TODO
+        # TODO: ideia era importar no programa?
         print(clipboard.text())
 
     def sizeHint(self):
@@ -396,6 +408,9 @@ class DataTableView(QtWidgets.QTableView):
         return QSize(width, height)
 
 
+
+#  HEADERS
+
 class HeaderModel(QtCore.QAbstractTableModel):
     """
     Model for HeaderView
@@ -405,6 +420,7 @@ class HeaderModel(QtCore.QAbstractTableModel):
         super().__init__(parent)
         self.df = df
         self.orientation = orientation
+        print('HeaderModel (the col/row values)')
 
     def columnCount(self, parent=None):
         if self.orientation == Qt.Horizontal:
@@ -455,7 +471,6 @@ class HeaderModel(QtCore.QAbstractTableModel):
             else:
                 return None  # These cells should be hidden anyways
 
-
 class HeaderView(QtWidgets.QTableView):
     """
     Displays the DataFrame index or columns depending on orientation
@@ -464,11 +479,18 @@ class HeaderView(QtWidgets.QTableView):
     def __init__(self, parent: DataFrameViewer, df, orientation):
         super().__init__(parent)
 
+        # Exporting function (this is needed or NameError name '---' is not defined)
+        self.orderDataBySelectedCol = self.orderDataBySelectedCol
+        self.sortOrder = Qt.AscendingOrder
+
+        print('HeaderView (the col/row)')
+
         # Setup
         self.orientation = orientation
         self.df = df
         self.parent = parent
         self.table = parent.dataView
+
         self.setModel(HeaderModel(df, orientation))
         # These are used during column resizing
         self.header_being_resized = None
@@ -513,12 +535,28 @@ class HeaderView(QtWidgets.QTableView):
     def test(self):
         print('test')
 
+
+    def orderDataBySelectedCol(self):
+        dataView = self.parent.dataView
+
+        # Pick the column clicked twice
+        index = self.selectionModel().selection().indexes()[0]
+
+        dataView.sortByColumn(index.column(), self.sortOrder)
+
+        # Update asc to desc or vice versa
+        if self.sortOrder == Qt.AscendingOrder:
+            self.sortOrder = Qt.DescendingOrder
+        else:
+            self.sortOrder = Qt.AscendingOrder
+
     # Header
     def on_selectionChanged(self):
         """
         Runs when cells are selected in the Header. This selects columns in the data table when the header is clicked,
         and then calls selectAbove()
         """
+
         # Check focus so we don't get recursive loop, since headers trigger selection of data cells and vice versa
         if self.hasFocus():
             dataView = self.parent.dataView
@@ -539,6 +577,7 @@ class HeaderView(QtWidgets.QTableView):
                 dataView.selectionModel().select(selection,
                                                  QtCore.QItemSelectionModel.Columns | QtCore.QItemSelectionModel.ClearAndSelect)
             if self.orientation == Qt.Vertical:
+                # Selection of row (line)
                 selection = self.selectionModel().selection()
 
                 last_row_ix = self.model().rowCount() - 1
@@ -601,6 +640,7 @@ class HeaderView(QtWidgets.QTableView):
 
     # This sets spans to group together adjacent cells with the same values
     def setSpans(self):
+        # TODO: pegar do self.df ?
         df = self.model().df
 
         # Find spans for horizontal HeaderView
@@ -743,6 +783,10 @@ class HeaderView(QtWidgets.QTableView):
                 elif self.orientation == Qt.Vertical:
                     self.parent.auto_size_row(header_index)
                 return True
+            else:
+                if self.orientation == Qt.Horizontal:
+                    # Double click on middle of a column
+                    self.orderDataBySelectedCol()
 
         # Handle active drag resizing
         if event.type() == QtCore.QEvent.MouseMove:
@@ -830,12 +874,27 @@ class TrackingSpacer(QtWidgets.QFrame):
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
 
-    from pandasgui.datasets import iris, flights, multi, pokemon, multidf
+    import pandas as pd
+    import sys
+    absPath = 'C:/Users/Tadeu/Documents/ProjetoPython'
+    sys.path.append(absPath + '/mylibs/pandasgui')
+    # from pandasgui.datasets import iris, flights, multi, pokemon, multidf
 
     # view = DataFrameViewer(pokemon)
     # view.show()
 
-    view2 = DataFrameViewer(multidf)
-    view2.show()
+    # view2 = DataFrameViewer(multidf)
+    # view2.show()
 
+    di = {
+        'values': ['Dias, ANC','Constantino, CJL','Soares, CJ','de Oliveira, SG','Santos, GDS','Bergamaski, FDF','Magalhaes, LG','Eguiluz, KIB','dos Santos, JCA','Sampaio, DV','Pizani, PS'],
+        'records': [1,1,1,1,1,1,1,1,1,2,2]
+    }
+    df = pd.DataFrame.from_dict(di)
+    view3 = DataFrameViewer(df)
+    view3.show()
     sys.exit(app.exec_())
+
+    # print(df.sort_values(by=df.columns[0], ascending=False))
+
+    
